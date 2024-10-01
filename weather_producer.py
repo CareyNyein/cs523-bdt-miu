@@ -1,12 +1,17 @@
+import os
 import requests
 import json
 from kafka import KafkaProducer
 import time
 import logging
-
+from dotenv import load_dotenv
+ 
+# Load environment variables from .env file
+load_dotenv()
+ 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
-
+ 
 # Function to fetch weather data from OpenWeatherMap API
 def fetch_weather_data(api_key, city):
     try:
@@ -17,19 +22,25 @@ def fetch_weather_data(api_key, city):
     except requests.exceptions.RequestException as e:
         logging.error(f"Error fetching weather data: {e}")
         return None
-
+ 
 # Kafka producer setup
-producer = KafkaProducer(bootstrap_servers='localhost:9092',
-                         value_serializer=lambda v: json.dumps(v).encode('utf-8'))
-
-# OpenWeatherMap API key and city
-api_key = 'a874db6dc25dea672c15aab50ba63ee5'
+producer = KafkaProducer(
+    bootstrap_servers='localhost:9092',
+    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+)
+ 
+# OpenWeatherMap API key from environment variable and city
+api_key = os.getenv('OPENWEATHERMAP_API_KEY')
+if not api_key:
+    logging.error("API key not found in environment variables. Please set 'OPENWEATHERMAP_API_KEY' in the .env file.")
+    exit(1)
+ 
 city = 'New York'
-
+ 
 try:
     while True:
         weather_data = fetch_weather_data(api_key, city)
-        
+       
         if weather_data:
             # Prepare data to send to Kafka
             message = {
@@ -39,19 +50,20 @@ try:
                 "description": weather_data["weather"][0]["description"],  # Extract weather description
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")  # Generate current timestamp
             }
-
+ 
             # Send the weather data to Kafka
             producer.send('weather', message)
             logging.info(f"Weather data sent to Kafka: {message}")
         else:
             logging.warning("Failed to retrieve weather data.")
-        
+       
         time.sleep(60)  # Fetch data every 60 seconds
-
+ 
 except KeyboardInterrupt:
     logging.info("Stopping the producer...")
-
+ 
 finally:
     # Ensure the Kafka producer is properly closed
     producer.close()
     logging.info("Kafka producer closed.")
+ 
